@@ -38,6 +38,7 @@ func main() {
 		rest.Post("/spu/:oper", service.SpuHandle),
 		rest.Post("/order/:oper", service.OrderHandle),
 		rest.Post("/user/:oper", service.UserHandle),
+		rest.Post("/topImage/:oper", service.TopImageHandle),
 		rest.Get("/refresh_token", jwtMiddleWare.RefreshHandler),
 	)
 	api.SetApp(api_router)

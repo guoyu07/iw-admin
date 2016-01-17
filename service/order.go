@@ -6,6 +6,11 @@ import (
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 	"net/http"
+	"time"
+)
+
+const (
+	layout = time.RFC3339
 )
 
 func updateOrder(session *mgo.Session, orderInfo map[string]interface{}) error {
@@ -19,16 +24,28 @@ func updateOrder(session *mgo.Session, orderInfo map[string]interface{}) error {
 
 func findOrder(session *mgo.Session, scenior map[string]interface{}) (result []map[string]interface{}, err error) {
 	c := session.DB("order").C("items")
-
+	// time.Local = time.UTC
 	query, ok := scenior["query"].(map[string]interface{})
 	if !ok {
 		return nil, NotFoundFieldError
 	}
+	fmt.Println(query)
+	//conver to date
+	orderDate := query["order_date"].(map[string]interface{})
+	fromDate := orderDate["$gte"].(string)
+	orderDate["$gte"], _ = time.Parse(layout, fromDate)
+	toDate := orderDate["$lt"].(string)
+	orderDate["$lt"], _ = time.Parse(layout, toDate)
+
+	if userName, ok := query["addressInfo.username"]; ok {
+		query["addressInfo.username"] = &bson.RegEx{Pattern: userName.(string), Options: "i"}
+	}
+
 	sort, ok := scenior["sort"].(string)
 	if !ok {
 		return nil, NotFoundFieldError
 	}
-
+	fmt.Println(query)
 	err = c.Find(query).Select(bson.M{"msg": 0}).Sort(sort).All(&result)
 	if err != nil {
 		return nil, err
@@ -45,8 +62,10 @@ func findOrder(session *mgo.Session, scenior map[string]interface{}) (result []m
 			continue
 		}
 		item["userInfo"] = userInfo
+		item["key"] = item["_id"].(string) + item["state"].(string)
 
 	}
+	fmt.Println(result)
 	return result, err
 }
 

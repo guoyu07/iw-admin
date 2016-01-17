@@ -29,6 +29,9 @@ func findUser(session *mgo.Session, scenior map[string]interface{}) (result []ma
 	if !ok {
 		return nil, NotFoundFieldError
 	}
+	if userName, ok := query["address.username"]; ok {
+		query["address.username"] = &bson.RegEx{Pattern: userName.(string), Options: "i"}
+	}
 	sort, ok := scenior["sort"].(string)
 	if !ok {
 		return nil, NotFoundFieldError
@@ -69,10 +72,10 @@ func appendAmbInfo(session *mgo.Session, userInfo map[string]interface{}) error 
 	return nil
 }
 
-func BecomeAmb(session *mgo.Session, userInfo map[string]interface{}) error {
+func becomeAmb(session *mgo.Session, userInfo map[string]interface{}) (ambCode string, err error) {
 	objectId, ok := userInfo["_id"].(string)
 	if !ok {
-		return NotFoundFieldError
+		return "", NotFoundFieldError
 	}
 	codeLock.Lock()
 	defer codeLock.Unlock()
@@ -81,31 +84,56 @@ func BecomeAmb(session *mgo.Session, userInfo map[string]interface{}) error {
 		ReturnNew: true,
 		Upsert:    true,
 	}
-	ambCode := make(map[string]interface{})
-	info, err := session.DB("basic").C("ambCode").Find(bson.M{"_id": "code"}).Apply(change, ambCode)
+	ambCodeInfo := make(map[string]interface{})
+	_, err = session.DB("basic").C("ambCodeInfo").Find(bson.M{"_id": "code"}).Apply(change, ambCodeInfo)
 	if err != nil {
-		return err
+		return "", err
 	}
-	ambCodeStr := strconv.Itoa(ambCode["n"].(int))
+	ambCodeStr := strconv.Itoa(ambCodeInfo["n"].(int))
 	buffer := bytes.NewBufferString("A")
 	for i := 0; i < 4-len(ambCodeStr); i++ {
 		buffer.WriteString("0")
 	}
 	buffer.WriteString(ambCodeStr)
+	ambCode = buffer.String()
 	change = mgo.Change{
-		Update: bson.M{"$set": bson.M{"ambCode": buffer.String()}},
+		Update: bson.M{"$set": bson.M{"ambCode": ambCode}},
 		Upsert: true,
 	}
-	info, err = session.DB("basic").C("user").Find(bson.M{"_id": "code"}).Apply(change, ambCode)
+	_, err = session.DB("basic").C("user").Find(bson.M{"_id": objectId}).Apply(change, ambCodeInfo)
 	if err != nil {
-		return err
+		return "", err
 	}
+	return ambCode, nil
+}
+
+func findLevel(session *mgo.Session) (result []map[string]interface{}, err error) {
+	err = session.DB("basic").C("level").Find(bson.M{}).All(&result)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func saveLevel(session *mgo.Session, levelInfo map[string]interface{}) error {
+	levelCol := session.DB("basic").C("level")
+	dataArray := levelInfo["list"].([]interface{})
+	for _, level := range dataArray {
+		l := level.(map[string]interface{})
+		id := l["_id"]
+		delete(l, "_id")
+		err := levelCol.Update(bson.M{"_id": id}, l)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
 func UserHandle(w rest.ResponseWriter, r *rest.Request) {
-	orderInfo := make(map[string]interface{})
-	err := r.DecodeJsonPayload(&orderInfo)
+	userInfo := make(map[string]interface{})
+	err := r.DecodeJsonPayload(&userInfo)
 	if err != nil {
 		rest.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -120,18 +148,33 @@ func UserHandle(w rest.ResponseWriter, r *rest.Request) {
 
 	switch r.PathParam("oper") {
 	case "find":
-		itemList, interErr := findUser(session, orderInfo)
+		itemList, interErr := findUser(session, userInfo)
 		if interErr == nil {
 			err = w.WriteJson(itemList)
 		} else {
 			err = interErr
 		}
-	case "update":
-		err = updateUser(session, orderInfo)
+	case "becomeAmb":
+		ambCode, err := becomeAmb(session, userInfo)
+
+		if err == nil {
+			result := bson.M{"ambCode": ambCode}
+			fmt.Println(result)
+			err = w.WriteJson(result)
+		}
+	case "findLevel":
+		itemList, interErr := findLevel(session)
+		if interErr == nil {
+			err = w.WriteJson(itemList)
+		} else {
+			err = interErr
+		}
+	case "saveLevel":
+		err = saveLevel(session, userInfo)
 	default:
-		rest.Error(w, "order Not Implemented Operation", http.StatusNotImplemented)
+		rest.Error(w, "user Not Implemented Operation", http.StatusNotImplemented)
 	}
 	if err != nil {
-		rest.Error(w, fmt.Sprintf("order operation error:%s", err.Error()), http.StatusInternalServerError)
+		rest.Error(w, fmt.Sprintf("user operation error:%s", err.Error()), http.StatusInternalServerError)
 	}
 }
