@@ -45,7 +45,6 @@ func findOrder(session *mgo.Session, scenior map[string]interface{}) (result []m
 	if !ok {
 		return nil, NotFoundFieldError
 	}
-	fmt.Println(query)
 	err = c.Find(query).Select(bson.M{"msg": 0}).Sort(sort).All(&result)
 	if err != nil {
 		return nil, err
@@ -65,7 +64,6 @@ func findOrder(session *mgo.Session, scenior map[string]interface{}) (result []m
 		item["key"] = item["_id"].(string) + item["state"].(string)
 
 	}
-	fmt.Println(result)
 	return result, err
 }
 

@@ -32,6 +32,14 @@ func updateSpu(session *mgo.Session, spuInfo map[string]interface{}) error {
 	return err
 }
 
+func delSpu(session *mgo.Session, spuInfo map[string]interface{}) error {
+	objectId := bson.ObjectIdHex(spuInfo["_id"].(string))
+	delete(spuInfo, "_id")
+	c := session.DB("product").C("items")
+	err := c.RemoveId(objectId)
+	return err
+}
+
 func toggleOnSale(session *mgo.Session, spuInfo map[string]interface{}) error {
 	objectId, ok := spuInfo["_id"].(string)
 	if !ok {
@@ -95,6 +103,8 @@ func SpuHandle(w rest.ResponseWriter, r *rest.Request) {
 		err = addSpu(session, spuInfo)
 	case "update":
 		err = updateSpu(session, spuInfo)
+	case "del":
+		err = delSpu(session, spuInfo)
 	case "toggleOnSale":
 		err = toggleOnSale(session, spuInfo)
 	case "find":

@@ -159,7 +159,6 @@ func UserHandle(w rest.ResponseWriter, r *rest.Request) {
 
 		if err == nil {
 			result := bson.M{"ambCode": ambCode}
-			fmt.Println(result)
 			err = w.WriteJson(result)
 		}
 	case "findLevel":
